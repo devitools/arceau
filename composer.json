@@ -1,0 +1,22 @@
+{
+    "name": "devitools/arceau",
+    "type": "library",
+    "license": "MIT",
+    "version": "0.0.1",
+    "authors": [
+        {
+            "name": "William",
+            "email": "wilcorrea@gmail.com",
+            "role": "Owner"
+        }
+    ],
+    "require": {
+        "php": ">=7.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Devitools\\Arceau\\": "src/"
+        },
+        "files": ["src/bootstrap.php"]
+    }
+}
