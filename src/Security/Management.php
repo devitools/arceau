@@ -55,7 +55,7 @@ abstract class Management
         $this->query = $settings['query'] ?? $_SERVER['QUERY_STRING'] ?? '';
 
         $this->defaultMode = $settings['defaultMode'] ?? FIREWALL_DENY;
-        $this->template = $settings['template'] ?? __DIR__ . '/../views/403.php';
+        $this->template = $settings['template'] ?? __DIR__ . '/../../views/403.php';
     }
 
     /**
