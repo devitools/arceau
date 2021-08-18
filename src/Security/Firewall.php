@@ -32,9 +32,9 @@ class Firewall extends Management
             throw new InvalidArgumentException('Invalid filename');
         }
 
-        // https://regex101.com/r/dX93ak/1
+        // https://regex101.com/r/P2ZYjM/2
         foreach (file($filename) as $line) {
-            $pattern = '/^[^#]*(allow|deny) (.*);/m';
+            $pattern = '/^[^#]*?(allow|deny) (?:[0-9]{1,3}\.){3}[0-9]{1,3}[;\/]/m';
             preg_match($pattern, $line, $matches);
             if (!isset($matches[1], $matches[2])) {
                 continue;
