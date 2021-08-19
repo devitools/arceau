@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 use const Devitools\Arceau\Security\Helper\FIREWALL_ALLOW;
+use const Devitools\Arceau\Security\Helper\FIREWALL_DENY;
 
 /**
  * Class Firewall
@@ -34,12 +35,15 @@ class Firewall extends Management
 
         // https://regex101.com/r/P2ZYjM/2
         foreach (file($filename) as $line) {
-            $pattern = '/^[^#]*?(allow|deny) (?:[0-9]{1,3}\.){3}[0-9]{1,3}[;\/]/m';
+            $pattern = '/^[^#]*?(allow|deny) ([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*)[;\/]/m';
             preg_match($pattern, $line, $matches);
             if (!isset($matches[1], $matches[2])) {
                 continue;
             }
             [, $mode, $item] = $matches;
+            if (!in_array($mode, [FIREWALL_ALLOW, FIREWALL_DENY], true)) {
+                continue;
+            }
             $this->addItem($item, $mode);
         }
         return $this;
