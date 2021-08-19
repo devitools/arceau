@@ -115,7 +115,7 @@ trait Redis
              */
             public function set(string $key, $value): bool
             {
-                return $this->connection()->set($key, $value, $ttl ?? $this->ttl);
+                return $this->connection()->set($key, $value, $this->ttl);
             }
         };
         return $this;

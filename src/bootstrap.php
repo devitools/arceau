@@ -30,3 +30,12 @@ function debug(...$args)
     var_dump($args);
     echo '</pre>';
 }
+
+/**
+ * @param ...$args
+ */
+function stop(...$args)
+{
+    debug(...$args);
+    exit();
+}
