@@ -17,6 +17,7 @@ trait Redis
     /**
      * @param string $host
      * @param string $port
+     * @param int $secondsToExpire
      *
      * @return $this
      */
@@ -26,7 +27,7 @@ trait Redis
             throw new RuntimeException("The driver '{$this->cacheDriver->name()}' is already configured");
         }
 
-        $this->cacheDriver = new class ($host, $port) implements Driver {
+        $this->cacheDriver = new class ($host, $port, $secondsToExpire) implements Driver {
             /**
              * @var Connection
              */
