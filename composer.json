@@ -2,7 +2,7 @@
     "name": "devitools/arceau",
     "type": "library",
     "license": "MIT",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "authors": [
         {
             "name": "William",
@@ -11,7 +11,9 @@
         }
     ],
     "require": {
-        "php": ">=7.3"
+        "php": ">=7.3",
+        "ext-json": "*",
+        "predis/predis": "^1.1"
     },
     "autoload": {
         "psr-4": {

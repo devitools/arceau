@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Devitools\Arceau\Security;
 
 use Closure;
+use Devitools\Arceau\Cache\Driver;
+use Devitools\Arceau\Cache\Redis;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -18,6 +20,32 @@ use const Devitools\Arceau\Security\Helper\FIREWALL_DENY;
  */
 class Firewall extends Management
 {
+    /**
+     * @see Redis
+     */
+    use Redis;
+
+    /**
+     * @var Driver
+     */
+    protected $cacheDriver;
+
+    /**
+     * @var int
+     */
+    protected $secondsToExpire = 60;
+
+    /**
+     * @param int $secondsToExpire
+     *
+     * @return $this
+     */
+    public function setSecondsToExpire(int $secondsToExpire): self
+    {
+        $this->secondsToExpire = $secondsToExpire;
+        return $this;
+    }
+
     /**
      * @param string $filename
      *
@@ -78,35 +106,88 @@ class Firewall extends Management
     }
 
     /**
+     * @param string $key
+     *
+     * @return mixed|null
+     */
+    protected function recover(string $key)
+    {
+        if (!$this->cacheDriver) {
+            return null;
+        }
+        if (!$this->cacheDriver->has($key)) {
+            return null;
+        }
+        return $this->cacheDriver->get($key);
+    }
+
+    /**
+     * @param string $key
+     * @param bool $value
+     *
+     * @return $this
+     */
+    protected function register(string $key, bool $value): self
+    {
+        if (!$this->cacheDriver) {
+            return $this;
+        }
+        $this->cacheDriver->set($key, $value, $this->secondsToExpire);
+        return $this;
+    }
+
+    /**
      * @param Closure|null $callback
      *
      * @return bool
      */
     public function validate(Closure $callback = null): bool
     {
-        $isAllowed = $this->getDefaultMode() === FIREWALL_ALLOW;
-        $rule = 'default';
         $pattern = '';
-        foreach ($this->getItems() as $candidate => $try) {
-            $matched = $this->match((string)$candidate);
+        $rule = 'default';
+        foreach ($this->getItems() as $patternCandidate => $ruleCandidate) {
+            $cached = $this->recover($patternCandidate);
+            if (isset($cached)) {
+                $pattern = $patternCandidate;
+                $rule = $ruleCandidate;
+                return $this->answer($cached, $pattern, $rule, $callback);
+            }
+
+            $matched = $this->match((string)$patternCandidate);
             if (!$matched) {
                 continue;
             }
-            $pattern = $candidate;
-            $rule = $try;
+
+            $pattern = $patternCandidate;
+            $rule = $ruleCandidate;
             break;
         }
 
+        $allowed = $this->getDefaultMode() === FIREWALL_ALLOW;
         if ($rule !== 'default') {
-            $isAllowed = $rule === FIREWALL_ALLOW;
+            $allowed = $rule === FIREWALL_ALLOW;
         }
 
+        $this->register($pattern, $allowed);
+
+        return $this->answer($allowed, $pattern, $rule, $callback);
+    }
+
+    /**
+     * @param bool $allowed
+     * @param string $pattern
+     * @param string $rule
+     * @param Closure|null $callback
+     *
+     * @return bool|mixed
+     */
+    protected function answer(bool $allowed, string $pattern, string $rule, ?Closure $callback)
+    {
         if (!isset($callback)) {
-            return $isAllowed;
+            return $allowed;
         }
-
-        $answer = $callback($this, $isAllowed, $pattern, $rule);
-        return $answer ?? $isAllowed;
+        $answer = $callback($this, $allowed, $pattern, $rule);
+        return $answer ?? $allowed;
     }
 
     /**
@@ -146,7 +227,9 @@ class Firewall extends Management
             if ($result) {
                 return;
             }
-            throw new RuntimeException("{$firewall->getIp()} is not allowed by rule '{$rule}' with pattern '{$pattern}'");
+            throw new RuntimeException(
+                "{$firewall->getIp()} is not allowed by rule '{$rule}' with pattern '{$pattern}'"
+            );
         };
         $this->validate($callback);
     }
