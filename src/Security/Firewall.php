@@ -80,19 +80,19 @@ class Firewall extends Management
     /**
      * @param string $candidate
      *
-     * @return bool
+     * @return string|null
      */
-    private function match(string $candidate): bool
+    private function match(string $candidate): ?string
     {
         $pieces = explode('query:', $candidate);
         if (count($pieces) === 1) {
             $pattern = '/' . str_replace('\*', '(.*)', preg_quote($candidate)) . '/';
-            $match = preg_match($pattern, $this->getIp(), $matches);
-            return (bool)$match;
+            preg_match($pattern, $this->getIp(), $matches);
+            return $matches[0] ?? null;
         }
 
         if (count($pieces) !== 2) {
-            return false;
+            return null;
         }
 
         $query = $pieces[1];
@@ -101,33 +101,35 @@ class Firewall extends Management
             '|' .
             str_replace('*', '(.*)', str_replace('/', '%2F', $query)) .
             '/';
-        $match = preg_match($pattern, $this->getQuery(), $matches);
-        return (bool)$match;
+        preg_match($pattern, $this->getQuery(), $matches);
+        return $matches[0] ?? null;
     }
 
     /**
-     * @param string $key
-     *
-     * @return mixed|null
+     * @return array|null
      */
-    protected function recover(string $key)
+    protected function recover(): ?array
     {
         if (!$this->cacheDriver) {
             return null;
         }
-        if (!$this->cacheDriver->has($key)) {
-            return null;
+        $keys = [$this->getIp(), $this->getQuery()];
+        foreach ($keys as $key) {
+            if (!$this->cacheDriver->has($key)) {
+                continue;
+            }
+            return $this->cacheDriver->get($key);
         }
-        return $this->cacheDriver->get($key);
+        return null;
     }
 
     /**
      * @param string $key
-     * @param bool $value
+     * @param array $value
      *
      * @return $this
      */
-    protected function register(string $key, bool $value): self
+    protected function register(string $key, array $value): self
     {
         if (!$this->cacheDriver) {
             return $this;
@@ -143,50 +145,51 @@ class Firewall extends Management
      */
     public function validate(Closure $callback = null): bool
     {
-        $pattern = '';
-        $rule = 'default';
-        foreach ($this->getItems() as $patternCandidate => $ruleCandidate) {
-            $cached = $this->recover($patternCandidate);
-            if (isset($cached)) {
-                $pattern = $patternCandidate;
-                $rule = $ruleCandidate;
-                return $this->answer($cached, $pattern, $rule, $callback);
-            }
+        $cached = $this->recover();
+        if (isset($cached)) {
+            [$allowed, $pattern, $mode] = $cached;
+            return $this->answer($allowed, $pattern, $mode, $callback);
+        }
 
-            $matched = $this->match((string)$patternCandidate);
-            if (!$matched) {
+        $pattern = '';
+        $mode = 'default';
+        foreach ($this->getItems() as $patternCandidate => $modeCandidate) {
+            $key = $this->match((string)$patternCandidate);
+            if (!isset($key)) {
                 continue;
             }
 
             $pattern = $patternCandidate;
-            $rule = $ruleCandidate;
+            $mode = $modeCandidate;
             break;
         }
 
         $allowed = $this->getDefaultMode() === FIREWALL_ALLOW;
-        if ($rule !== 'default') {
-            $allowed = $rule === FIREWALL_ALLOW;
+        if ($mode !== 'default') {
+            $allowed = $mode === FIREWALL_ALLOW;
         }
 
-        $this->register($pattern, $allowed);
+        if (isset($key)) {
+            $this->register($key, [$allowed, $pattern, $mode]);
+        }
 
-        return $this->answer($allowed, $pattern, $rule, $callback);
+        return $this->answer($allowed, $pattern, $mode, $callback);
     }
 
     /**
      * @param bool $allowed
      * @param string $pattern
-     * @param string $rule
+     * @param string $mode
      * @param Closure|null $callback
      *
      * @return bool|mixed
      */
-    protected function answer(bool $allowed, string $pattern, string $rule, ?Closure $callback)
+    protected function answer(bool $allowed, string $pattern, string $mode, ?Closure $callback)
     {
         if (!isset($callback)) {
             return $allowed;
         }
-        $answer = $callback($this, $allowed, $pattern, $rule);
+        $answer = $callback($this, $allowed, $pattern, $mode);
         return $answer ?? $allowed;
     }
 
@@ -195,7 +198,7 @@ class Firewall extends Management
      */
     public function handle(): void
     {
-        $callback = static function (Firewall $firewall, bool $result, string $pattern, string $rule) {
+        $callback = static function (Firewall $firewall, bool $result, string $pattern, string $mode) {
             if ($result) {
                 return;
             }
@@ -211,7 +214,7 @@ class Firewall extends Management
                 exit();
             }
             if (is_callable($template)) {
-                $template($firewall, $pattern, $rule);
+                $template($firewall, $pattern, $mode);
             }
             exit();
         };
@@ -223,12 +226,12 @@ class Firewall extends Management
      */
     public function check(): void
     {
-        $callback = static function (Firewall $firewall, bool $result, string $pattern, string $rule) {
+        $callback = static function (Firewall $firewall, bool $result, string $pattern, string $mode) {
             if ($result) {
                 return;
             }
             throw new RuntimeException(
-                "{$firewall->getIp()} is not allowed by rule '{$rule}' with pattern '{$pattern}'"
+                "{$firewall->getIp()} is not allowed by rule '{$mode}' with pattern '{$pattern}'"
             );
         };
         $this->validate($callback);

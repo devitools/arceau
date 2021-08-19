@@ -62,6 +62,7 @@ trait Redis
                 if (!$this->connection) {
                     $redis = new Connection();
                     $connected = $redis->connect($this->host, (int)$this->port, 1, NULL, 100);
+                    $redis->setOption(Connection::OPT_SERIALIZER, Connection::SERIALIZER_JSON);
                     if (!$connected) {
                         throw new RuntimeException('Error on redis connection');
                     }
@@ -95,14 +96,7 @@ trait Redis
              */
             public function get(string $key)
             {
-                $value = $this->connection()->get($key);
-                if ($value === 'true') {
-                    return true;
-                }
-                if ($value === 'false') {
-                    return false;
-                }
-                return json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+                return $this->connection()->get($key);
             }
 
             /**
@@ -114,7 +108,7 @@ trait Redis
              */
             public function set(string $key, $value, int $ttl = 60): bool
             {
-                return $this->connection()->set($key, json_encode($value, JSON_THROW_ON_ERROR), $ttl);
+                return $this->connection()->set($key, $value, $ttl);
             }
         };
         return $this;
