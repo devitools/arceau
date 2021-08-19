@@ -31,22 +31,6 @@ class Firewall extends Management
     protected $cacheDriver;
 
     /**
-     * @var int
-     */
-    protected $secondsToExpire = 60;
-
-    /**
-     * @param int $secondsToExpire
-     *
-     * @return $this
-     */
-    public function setSecondsToExpire(int $secondsToExpire): self
-    {
-        $this->secondsToExpire = $secondsToExpire;
-        return $this;
-    }
-
-    /**
      * @param string $filename
      *
      * @return $this
@@ -134,7 +118,7 @@ class Firewall extends Management
         if (!$this->cacheDriver) {
             return $this;
         }
-        $this->cacheDriver->set($key, $value, $this->secondsToExpire);
+        $this->cacheDriver->set($key, $value);
         return $this;
     }
 

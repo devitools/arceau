@@ -33,9 +33,8 @@ interface Driver
     /**
      * @param string $key
      * @param mixed $value
-     * @param int $ttl
      *
      * @return bool
      */
-    public function set(string $key, $value, int $ttl = 60): bool;
+    public function set(string $key, $value): bool;
 }

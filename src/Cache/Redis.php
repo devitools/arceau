@@ -20,13 +20,18 @@ trait Redis
      *
      * @return $this
      */
-    public function configureRedis(string $host, string $port): self
+    public function configureRedis(string $host, string $port, int $secondsToExpire): self
     {
         if (isset($this->cacheDriver)) {
             throw new RuntimeException("The driver '{$this->cacheDriver->name()}' is already configured");
         }
 
         $this->cacheDriver = new class ($host, $port) implements Driver {
+            /**
+             * @var Connection
+             */
+            private $connection;
+
             /**
              * @var string
              */
@@ -38,20 +43,22 @@ trait Redis
             private $port;
 
             /**
-             * @var Connection
+             * @var int
              */
-            private $connection;
+            private $ttl;
 
             /**
              *  Anonymous constructor.
              *
              * @param string $host
              * @param string $port
+             * @param int $secondsToExpire
              */
-            public function __construct(string $host, string $port)
+            public function __construct(string $host, string $port, int $secondsToExpire = 60)
             {
                 $this->host = $host;
                 $this->port = $port;
+                $this->ttl = $secondsToExpire;
             }
 
             /**
@@ -102,13 +109,12 @@ trait Redis
             /**
              * @param string $key
              * @param $value
-             * @param int $ttl
              *
              * @return bool
              */
-            public function set(string $key, $value, int $ttl = 60): bool
+            public function set(string $key, $value): bool
             {
-                return $this->connection()->set($key, $value, $ttl);
+                return $this->connection()->set($key, $value, $ttl ?? $this->ttl);
             }
         };
         return $this;
