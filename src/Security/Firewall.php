@@ -191,7 +191,6 @@ class Firewall extends Management
 
             $filename = $firewall->getTemplate();
             if (file_exists($filename)) {
-                /** @noinspection PhpIncludeInspection */
                 $template = require $filename;
             }
             if (!isset($template)) {
