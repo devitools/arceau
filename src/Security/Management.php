@@ -31,12 +31,17 @@ abstract class Management
     /**
      * @var array
      */
-    private $items;
+    private $ips = [];
 
     /**
      * @var string
      */
     private $query;
+
+    /**
+     * @var array
+     */
+    private $queries = [];
 
     /**
      * @var string
@@ -51,7 +56,6 @@ abstract class Management
     public function __construct(array $settings = [])
     {
         $this->ip = $settings['ip'] ?? ip();
-        $this->items = $settings['items'] ?? [];
         $this->query = $settings['query'] ?? $_SERVER['QUERY_STRING'] ?? '';
 
         $this->defaultMode = $settings['defaultMode'] ?? FIREWALL_DENY;
@@ -87,9 +91,9 @@ abstract class Management
     /**
      * @return array
      */
-    public function getItems(): array
+    public function getIps(): array
     {
-        return $this->items;
+        return $this->ips;
     }
 
     /**
@@ -101,11 +105,19 @@ abstract class Management
     }
 
     /**
-     * @return mixed|string
+     * @return string
      */
-    public function getQuery()
+    public function getQuery(): string
     {
         return $this->query;
+    }
+
+    /**
+     * @return array
+     */
+    public function getQueries(): array
+    {
+        return $this->queries;
     }
 
     /**
@@ -131,32 +143,84 @@ abstract class Management
     }
 
     /**
-     * @param string[] $items
+     * @param array $ips
+     *
+     * @return $this
+     */
+    public function mergeIps(array $ips): self
+    {
+        $this->ips = array_merge($this->ips, $ips);
+        return $this;
+    }
+
+    /**
+     * @param string $ip
      * @param string $mode
      *
      * @return $this
      */
-    public function addItems(array $items, string $mode = FIREWALL_ALLOW): self
+    public function addIp(string $ip, string $mode = FIREWALL_ALLOW): self
     {
-        foreach ($items as $item) {
-            $this->addItem($item, $mode);
+        $previous = $this->ips[$ip] ?? null;
+        if (isset($previous) && $previous !== $mode) {
+            throw new InvalidArgumentException("The ip rule '{$ip}' is already registered with '{$previous}'");
+        }
+        $this->ips[$ip] = $mode;
+        return $this;
+    }
+
+    /**
+     * @param string[] $ips
+     * @param string $mode
+     *
+     * @return $this
+     */
+    public function addIps(array $ips, string $mode = FIREWALL_ALLOW): self
+    {
+        foreach ($ips as $ip) {
+            $this->addIp($ip, $mode);
         }
         return $this;
     }
 
     /**
-     * @param string $item
+     * @param string $query
      * @param string $mode
      *
      * @return $this
      */
-    public function addItem(string $item, string $mode = FIREWALL_ALLOW): self
+    public function addQuery(string $query, string $mode = FIREWALL_ALLOW): self
     {
-        $previous = $this->items[$item] ?? null;
+        $previous = $this->queries[$query] ?? null;
         if (isset($previous) && $previous !== $mode) {
-            throw new InvalidArgumentException("The item '{$item}' is already registered with '{$previous}'");
+            throw new InvalidArgumentException("The query rule '{$query}' is already registered with '{$previous}'");
         }
-        $this->items[$item] = $mode;
+        $this->queries[$query] = $mode;
+        return $this;
+    }
+
+    /**
+     * @param string[] $queries
+     * @param string $mode
+     *
+     * @return $this
+     */
+    public function addQueries(array $queries, string $mode = FIREWALL_ALLOW): self
+    {
+        foreach ($queries as $query) {
+            $this->addQuery($query, $mode);
+        }
+        return $this;
+    }
+
+    /**
+     * @param array $queries
+     *
+     * @return $this
+     */
+    public function mergeQueries(array $queries): self
+    {
+        $this->queries = array_merge($this->queries, $queries);
         return $this;
     }
 }

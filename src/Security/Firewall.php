@@ -7,8 +7,12 @@ namespace Devitools\Arceau\Security;
 use Closure;
 use Devitools\Arceau\Cache\Driver;
 use Devitools\Arceau\Cache\Redis;
-use InvalidArgumentException;
+use Devitools\Arceau\Security\Helper\NginxHelper;
 use RuntimeException;
+use Throwable;
+
+use function Devitools\Arceau\Security\Helper\debug;
+use function Devitools\Arceau\Security\Helper\stop;
 
 use const Devitools\Arceau\Security\Helper\FIREWALL_ALLOW;
 use const Devitools\Arceau\Security\Helper\FIREWALL_DENY;
@@ -26,85 +30,60 @@ class Firewall extends Management
     use Redis;
 
     /**
+     * @see NginxHelper
+     */
+    use NginxHelper;
+
+    /**
      * @var Driver
      */
     protected $cacheDriver;
 
     /**
-     * @param string $filename
+     * @param bool $allowed
+     * @param string $mode
+     * @param Closure|null $callback
      *
-     * @return $this
+     * @return bool|mixed
      */
-    public function addNginxFile(string $filename): self
+    protected function answer(bool $allowed, string $mode, ?Closure $callback)
     {
-        if (!file_exists($filename)) {
-            throw new InvalidArgumentException('Invalid filename');
+        if (!isset($callback)) {
+            return $allowed;
         }
-
-        if (is_dir($filename)) {
-            throw new InvalidArgumentException('Invalid filename');
-        }
-
-        // https://regex101.com/r/P2ZYjM/4
-        foreach (file($filename) as $line) {
-            $pattern = '/^[^#]*?(allow|deny) ([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*)[;\/]/m';
-            preg_match($pattern, $line, $matches);
-            if (!isset($matches[1], $matches[2])) {
-                continue;
-            }
-            [, $mode, $item] = $matches;
-            if (!in_array($mode, [FIREWALL_ALLOW, FIREWALL_DENY], true)) {
-                continue;
-            }
-            $this->addItem($item, $mode);
-        }
-        return $this;
+        $answer = $callback($this, $allowed, $mode);
+        return $answer ?? $allowed;
     }
 
     /**
-     * @param string $candidate
+     * @param string $pattern
+     * @param string $subject
      *
-     * @return string|null
+     * @return bool
      */
-    private function match(string $candidate): ?string
+    private function test(string $pattern, string $subject): bool
     {
-        $pieces = explode('query:', $candidate);
-        if (count($pieces) === 1) {
-            $pattern = '/' . str_replace('\*', '(.*)', preg_quote($candidate)) . '/';
-            preg_match($pattern, $this->getIp(), $matches);
-            return $matches[0] ?? null;
+        try {
+            return (bool)preg_match($pattern, $subject);
+        } catch (Throwable $exception) {
         }
-
-        if (count($pieces) !== 2) {
-            return null;
-        }
-
-        $query = $pieces[1];
-        $pattern = '/' .
-            str_replace('*', '(.*)', str_replace('/', '\/', $query)) .
-            '|' .
-            str_replace('*', '(.*)', str_replace('/', '%2F', $query)) .
-            '/';
-        preg_match($pattern, $this->getQuery(), $matches);
-        return $matches[0] ?? null;
+        return false;
     }
 
     /**
+     * @param string $key
+     *
      * @return array|null
      */
-    protected function recover(): ?array
+    protected function recover(string $key): ?array
     {
         if (!$this->cacheDriver) {
             return null;
         }
-        $keys = [$this->getIp(), $this->getQuery()];
-        foreach ($keys as $key) {
-            if (!$this->cacheDriver->has($key)) {
-                continue;
-            }
-            return $this->cacheDriver->get($key);
+        if (!$this->cacheDriver->has($key)) {
+            return null;
         }
-        return null;
+        return $this->cacheDriver->get($key);
     }
 
     /**
@@ -129,60 +108,118 @@ class Firewall extends Management
      */
     public function validate(Closure $callback = null): bool
     {
-        $cached = $this->recover();
-        if (isset($cached)) {
-            [$allowed, $pattern, $mode] = $cached;
-            return $this->answer($allowed, $pattern, $mode, $callback);
+        $validated = $this->validateQuery();
+        if ($validated) {
+            [$allowed, $mode] = $validated;
+            return $this->answer($allowed, $mode, $callback);
         }
 
-        $pattern = '';
-        $mode = 'default';
-        foreach ($this->getItems() as $patternCandidate => $modeCandidate) {
-            $key = $this->match((string)$patternCandidate);
-            if (!isset($key)) {
-                continue;
-            }
-
-            $pattern = $patternCandidate;
-            $mode = $modeCandidate;
-            break;
-        }
-
-        $allowed = $this->getDefaultMode() === FIREWALL_ALLOW;
-        if ($mode !== 'default') {
-            $allowed = $mode === FIREWALL_ALLOW;
-        }
-
-        if (isset($key)) {
-            $this->register($key, [$allowed, $pattern, $mode]);
-        }
-
-        return $this->answer($allowed, $pattern, $mode, $callback);
+        $validated = $this->validateIp();
+        [$allowed, $mode] = $validated;
+        return $this->answer($allowed, $mode, $callback);
     }
 
     /**
-     * @param bool $allowed
-     * @param string $pattern
-     * @param string $mode
-     * @param Closure|null $callback
-     *
-     * @return bool|mixed
+     * @return array|null
      */
-    protected function answer(bool $allowed, string $pattern, string $mode, ?Closure $callback)
+    protected function validateIp(): ?array
     {
-        if (!isset($callback)) {
-            return $allowed;
+        $ip = $this->getIp();
+        $cached = $this->recover($ip);
+        if (isset($cached)) {
+            [$allowed, $mode] = $cached;
+            return [$allowed, $mode];
         }
-        $answer = $callback($this, $allowed, $pattern, $mode);
-        return $answer ?? $allowed;
+
+        $matched = $this->matchIp($ip);
+        if (isset($matched)) {
+            $mode = $matched;
+            $allowed = $mode === FIREWALL_ALLOW;
+        }
+
+        if (!isset($allowed, $mode)) {
+            $mode = 'default';
+            $allowed = $this->getDefaultMode() === FIREWALL_ALLOW;
+        }
+
+        $this->register($ip, [$allowed, $mode]);
+        return [$allowed, $mode];
+    }
+
+    /**
+     * @param string $ip
+     *
+     * @return string|null
+     */
+    private function matchIp(string $ip): ?string
+    {
+        $candidates = $this->getIps();
+        foreach ($candidates as $candidate => $mode) {
+            $pattern = '/' . str_replace('\*', '(.*)', preg_quote($candidate)) . '/';
+            $match = $this->test($pattern, $ip);
+            if (!$match) {
+                continue;
+            }
+            return $mode;
+        }
+        return null;
+    }
+
+    /**
+     * @return array|null
+     */
+    protected function validateQuery(): ?array
+    {
+        $query = $this->getQuery();
+        $cached = $this->recover($query);
+        if (isset($cached)) {
+            [$allowed, $mode] = $cached;
+            return [$allowed, $mode];
+        }
+
+        $matched = $this->matchQuery($query);
+        if (!isset($matched)) {
+            return null;
+        }
+        $mode = $matched;
+        $allowed = $mode === FIREWALL_ALLOW;
+
+        $this->register($query, [$allowed, $mode]);
+        return [$allowed, $mode];
+    }
+
+    /**
+     * @param string $query
+     *
+     * @return string|null
+     */
+    private function matchQuery(string $query): ?string
+    {
+        $candidateToPattern = static function (string $query) {
+            return '/' .
+                str_replace('*', '(.*)', str_replace('/', '\/', $query)) .
+                '|' .
+                str_replace('*', '(.*)', str_replace('/', '%2F', $query)) .
+                '/';
+        };
+        $candidates = $this->getQueries();
+        foreach ($candidates as $candidate => $mode) {
+            $pattern = $candidateToPattern($candidate);
+            $match = $this->test($pattern, $query);
+            if (!$match) {
+                continue;
+            }
+            return $mode;
+        }
+        return null;
     }
 
     /**
      * @throw RuntimeException
      */
-    public function handle(): void
+    public function check(): void
     {
-        $callback = static function (Firewall $firewall, bool $result, string $pattern, string $mode) {
+        $callback = static function (Firewall $firewall, bool $result, string $mode) {
             if ($result) {
                 return;
             }
@@ -197,7 +234,7 @@ class Firewall extends Management
                 exit();
             }
             if (is_callable($template)) {
-                $template($firewall, $pattern, $mode);
+                $template($firewall, $mode);
             }
             exit();
         };
@@ -207,7 +244,7 @@ class Firewall extends Management
     /**
      * @throw RuntimeException
      */
-    public function check(): void
+    public function handle(): void
     {
         $callback = static function (Firewall $firewall, bool $result, string $pattern, string $mode) {
             if ($result) {

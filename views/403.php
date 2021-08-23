@@ -4,10 +4,9 @@ use Devitools\Arceau\Security\Firewall;
 
 /**
  * @param Firewall $firewall
- * @param string $pattern
  * @param string $rule
  */
-return static function (Firewall $firewall, string $pattern, string $rule) {
+return static function (Firewall $firewall, string $rule) {
     ?>
     <html lang="en">
     <head>
@@ -284,22 +283,10 @@ return static function (Firewall $firewall, string $pattern, string $rule) {
                 <span class="hero-text"></span>
                 <span class="msg">This resource is <span>private</span>.</span>
                 <span class="support">
-                    <span>You Shall Not Pass!</span>
-                    <span>
-                        [
-                        <?php
-                        echo $firewall->getIp(); ?> blocked by '<?php
-                        echo $rule; ?>'
-                        <?php
-                        if ($pattern) {
-                            ?>
-                            with pattern '<?php
-                            echo $pattern; ?>'
-                            <?php
-                        }
-                        ?>
-                        ]
-                    </span>
+                    <small>
+                        <pre>[<?php echo $firewall->getIp(); ?>]</pre>
+                    </small>
+                    <pre style="color: #202527;"><?php echo $rule; ?></pre>
                 </span>
             </div>
             <div class="lock"></div>
