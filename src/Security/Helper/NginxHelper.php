@@ -36,7 +36,8 @@ trait NginxHelper
             if (!isset($matches[1], $matches[2])) {
                 continue;
             }
-            [, $mode, $item] = $matches;
+            $mode = $matches[1];
+            $item = $matches[2];
             if (!in_array($mode, [FIREWALL_ALLOW, FIREWALL_DENY], true)) {
                 continue;
             }

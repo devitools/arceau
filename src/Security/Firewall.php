@@ -11,11 +11,7 @@ use Devitools\Arceau\Security\Helper\NginxHelper;
 use RuntimeException;
 use Throwable;
 
-use function Devitools\Arceau\Security\Helper\debug;
-use function Devitools\Arceau\Security\Helper\stop;
-
 use const Devitools\Arceau\Security\Helper\FIREWALL_ALLOW;
-use const Devitools\Arceau\Security\Helper\FIREWALL_DENY;
 
 /**
  * Class Firewall
@@ -46,7 +42,7 @@ class Firewall extends Management
      *
      * @return bool|mixed
      */
-    protected function answer(bool $allowed, string $mode, ?Closure $callback)
+    protected function answer(bool $allowed, string $mode, Closure $callback = null)
     {
         if (!isset($callback)) {
             return $allowed;
@@ -75,7 +71,7 @@ class Firewall extends Management
      *
      * @return array|null
      */
-    protected function recover(string $key): ?array
+    protected function recover(string $key)
     {
         if (!$this->cacheDriver) {
             return null;
@@ -110,24 +106,24 @@ class Firewall extends Management
     {
         $validated = $this->validateQuery();
         if ($validated) {
-            [$allowed, $mode] = $validated;
+            list($allowed, $mode) = $validated;
             return $this->answer($allowed, $mode, $callback);
         }
 
         $validated = $this->validateIp();
-        [$allowed, $mode] = $validated;
+        list($allowed, $mode) = $validated;
         return $this->answer($allowed, $mode, $callback);
     }
 
     /**
      * @return array|null
      */
-    protected function validateIp(): ?array
+    protected function validateIp()
     {
         $ip = $this->getIp();
         $cached = $this->recover($ip);
         if (isset($cached)) {
-            [$allowed, $mode] = $cached;
+            list($allowed, $mode) = $cached;
             return [$allowed, $mode];
         }
 
@@ -151,7 +147,7 @@ class Firewall extends Management
      *
      * @return string|null
      */
-    private function matchIp(string $ip): ?string
+    private function matchIp(string $ip)
     {
         $candidates = $this->getIps();
         foreach ($candidates as $candidate => $mode) {
@@ -168,12 +164,12 @@ class Firewall extends Management
     /**
      * @return array|null
      */
-    protected function validateQuery(): ?array
+    protected function validateQuery()
     {
         $query = $this->getQuery();
         $cached = $this->recover($query);
         if (isset($cached)) {
-            [$allowed, $mode] = $cached;
+            list($allowed, $mode) = $cached;
             return [$allowed, $mode];
         }
 
@@ -193,7 +189,7 @@ class Firewall extends Management
      *
      * @return string|null
      */
-    private function matchQuery(string $query): ?string
+    private function matchQuery(string $query)
     {
         $candidateToPattern = static function (string $query) {
             return '/' .
@@ -217,7 +213,7 @@ class Firewall extends Management
     /**
      * @throw RuntimeException
      */
-    public function check(): void
+    public function check()
     {
         $callback = static function (Firewall $firewall, bool $result, string $mode) {
             if ($result) {
@@ -244,7 +240,7 @@ class Firewall extends Management
     /**
      * @throw RuntimeException
      */
-    public function handle(): void
+    public function handle()
     {
         $callback = static function (Firewall $firewall, bool $result, string $pattern, string $mode) {
             if ($result) {
