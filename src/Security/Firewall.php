@@ -252,4 +252,13 @@ class Firewall extends Management
         };
         $this->validate($callback);
     }
+
+    /**
+     * @return $this
+     */
+    public function debug(): self
+    {
+        file_put_contents('php://stdout', "{$this->getIp()} | {$this->getQuery()}");
+        return $this;
+    }
 }
